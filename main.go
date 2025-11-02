@@ -1,12 +1,10 @@
 package main
 
 import (
-	"image"
-	"image/color"
-	"image/draw"
-	"image/png"
+	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -140,181 +138,165 @@ func (m *maze) createExits() []exit {
 	return exits
 }
 
-var letterPatterns = map[string][]string{
-	"A": {
-		" XXX ",
-		"X   X",
-		"X   X",
-		"XXXXX",
-		"X   X",
-		"X   X",
-		"X   X",
-	},
-	"B": {
-		"XXXX ",
-		"X   X",
-		"X   X",
-		"XXXX ",
-		"X   X",
-		"X   X",
-		"XXXX ",
-	},
-	"C": {
-		" XXXX",
-		"X    ",
-		"X    ",
-		"X    ",
-		"X    ",
-		"X    ",
-		" XXXX",
-	},
-	"D": {
-		"XXXX ",
-		"X   X",
-		"X   X",
-		"X   X",
-		"X   X",
-		"X   X",
-		"XXXX ",
-	},
+type point struct {
+	x int
+	y int
 }
 
-func inBounds(img image.Image, x, y int) bool {
-	b := img.Bounds()
-	return x >= b.Min.X && x < b.Max.X && y >= b.Min.Y && y < b.Max.Y
-}
+func (m *maze) solvePath(start, goal exit) ([]point, error) {
+	startCell := point{x: start.x, y: start.y}
+	goalCell := point{x: goal.x, y: goal.y}
 
-func drawLetter(img *image.RGBA, letter string, centerX, centerY, pixelSize int, col color.Color) {
-	pattern, ok := letterPatterns[letter]
-	if !ok {
-		return
+	queue := []point{startCell}
+	visited := map[point]bool{startCell: true}
+	prev := map[point]point{}
+
+	directions := []struct {
+		dir direction
+		dx  int
+		dy  int
+	}{
+		{north, 0, -1},
+		{south, 0, 1},
+		{west, -1, 0},
+		{east, 1, 0},
 	}
-	height := len(pattern)
-	width := len(pattern[0])
-	startX := centerX - (width*pixelSize)/2
-	startY := centerY - (height*pixelSize)/2
 
-	for y, row := range pattern {
-		for x, ch := range row {
-			if ch != 'X' {
+	var found bool
+	for len(queue) > 0 && !found {
+		current := queue[0]
+		queue = queue[1:]
+
+		if current == goalCell {
+			found = true
+			break
+		}
+
+		cell := m.cells[current.y][current.x]
+		for _, d := range directions {
+			if cell.walls[d.dir] {
 				continue
 			}
-			for py := 0; py < pixelSize; py++ {
-				for px := 0; px < pixelSize; px++ {
-					ix := startX + x*pixelSize + px
-					iy := startY + y*pixelSize + py
-					if inBounds(img, ix, iy) {
-						img.Set(ix, iy, col)
-					}
-				}
+			nx, ny := current.x+d.dx, current.y+d.dy
+			if nx < 0 || nx >= m.width || ny < 0 || ny >= m.height {
+				continue
 			}
+			next := point{x: nx, y: ny}
+			if visited[next] {
+				continue
+			}
+			visited[next] = true
+			prev[next] = current
+			queue = append(queue, next)
 		}
 	}
+
+	if !found {
+		return nil, fmt.Errorf("no path found between exits %s and %s", start.label, goal.label)
+	}
+
+	path := []point{goalCell}
+	for path[len(path)-1] != startCell {
+		path = append(path, prev[path[len(path)-1]])
+	}
+
+	for i := 0; i < len(path)/2; i++ {
+		path[i], path[len(path)-1-i] = path[len(path)-1-i], path[i]
+	}
+
+	return path, nil
 }
 
-func drawMaze(m *maze, exits []exit, cellSize, wallThickness int, filename string) error {
-	width := m.width*cellSize + wallThickness
-	height := m.height*cellSize + wallThickness
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
+func generateHTML(m *maze, exits []exit, solution []point, cellSize int, filename string) error {
+	var sb strings.Builder
 
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.White}, image.Point{}, draw.Src)
+	sb.WriteString("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Maze</title>\n<style>\n")
+	sb.WriteString("body{font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;color:#222;padding:20px;}\n")
+	sb.WriteString(".maze{display:grid;grid-template-columns:repeat(")
+	sb.WriteString(fmt.Sprintf("%d,%dpx);gap:0;}", m.width, cellSize))
+	sb.WriteString("\n.cell{width:")
+	sb.WriteString(fmt.Sprintf("%dpx;height:%dpx;box-sizing:border-box;position:relative;background:#fff;}", cellSize, cellSize))
+	sb.WriteString("\n.cell.top{border-top:2px solid #000;}\n.cell.right{border-right:2px solid #000;}\n.cell.bottom{border-bottom:2px solid #000;}\n.cell.left{border-left:2px solid #000;}\n")
+	sb.WriteString(".cell.exit::after{content:attr(data-label);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-weight:bold;color:#1565c0;}\n")
+	sb.WriteString(".cell.solution{background:#fff59d;}\n")
+	sb.WriteString(".legend{margin-top:20px;}\n.legend span{display:inline-block;margin-right:15px;}\n")
+	sb.WriteString("</style>\n</head>\n<body>\n<h1>Maze</h1>\n")
 
-	wallColor := color.Black
+	sb.WriteString("<div class=\"maze\">\n")
 
-	drawWall := func(x0, y0, x1, y1 int) {
-		if x0 == x1 {
-			if y0 > y1 {
-				y0, y1 = y1, y0
-			}
-			for x := x0; x < x0+wallThickness; x++ {
-				for y := y0; y <= y1; y++ {
-					if inBounds(img, x, y) {
-						img.Set(x, y, wallColor)
-					}
-				}
-			}
-		} else if y0 == y1 {
-			if x0 > x1 {
-				x0, x1 = x1, x0
-			}
-			for y := y0; y < y0+wallThickness; y++ {
-				for x := x0; x <= x1; x++ {
-					if inBounds(img, x, y) {
-						img.Set(x, y, wallColor)
-					}
-				}
-			}
-		}
+	solutionSet := map[point]bool{}
+	for _, p := range solution {
+		solutionSet[p] = true
+	}
+
+	exitLabels := map[point]string{}
+	for _, ex := range exits {
+		exitLabels[point{x: ex.x, y: ex.y}] = ex.label
 	}
 
 	for y := 0; y < m.height; y++ {
 		for x := 0; x < m.width; x++ {
 			cell := m.cells[y][x]
-			px := x * cellSize
-			py := y * cellSize
+			classes := []string{"cell"}
 			if cell.walls[north] {
-				drawWall(px, py, px+cellSize, py)
+				classes = append(classes, "top")
+			}
+			if cell.walls[east] {
+				classes = append(classes, "right")
+			}
+			if cell.walls[south] {
+				classes = append(classes, "bottom")
 			}
 			if cell.walls[west] {
-				drawWall(px, py, px, py+cellSize)
+				classes = append(classes, "left")
 			}
-			if y == m.height-1 && cell.walls[south] {
-				drawWall(px, py+cellSize, px+cellSize, py+cellSize)
+			if solutionSet[point{x: x, y: y}] {
+				classes = append(classes, "solution")
 			}
-			if x == m.width-1 && cell.walls[east] {
-				drawWall(px+cellSize, py, px+cellSize, py+cellSize)
+
+			label := exitLabels[point{x: x, y: y}]
+			attributes := fmt.Sprintf("class=\"%s\"", strings.Join(classes, " "))
+			if label != "" {
+				attributes += fmt.Sprintf(" data-label=\"%s\"", label)
 			}
+
+			sb.WriteString("<div ")
+			sb.WriteString(attributes)
+			sb.WriteString("></div>\n")
 		}
 	}
 
-	letterColor := color.RGBA{0, 0, 255, 255}
-	letterSize := cellSize / 4
-	if letterSize < 2 {
-		letterSize = 2
-	}
+	sb.WriteString("</div>\n")
+	sb.WriteString("<div class=\"legend\"><span><strong>Exits:</strong> A, B, C, D</span><span><strong>Highlighted path:</strong> solution between exits A and B</span></div>\n")
+	sb.WriteString("</body>\n</html>")
 
-	for _, ex := range exits {
-		centerX := ex.x*cellSize + cellSize/2
-		centerY := ex.y*cellSize + cellSize/2
-		offset := cellSize / 3
-		switch ex.dir {
-		case north:
-			centerY -= offset
-		case south:
-			centerY += offset
-		case west:
-			centerX -= offset
-		case east:
-			centerX += offset
-		}
-		drawLetter(img, ex.label, centerX, centerY, letterSize, letterColor)
-	}
-
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	return png.Encode(file, img)
+	return os.WriteFile(filename, []byte(sb.String()), 0o644)
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	const (
-		mazeWidth     = 40
-		mazeHeight    = 40
-		cellSize      = 16
-		wallThickness = 3
-		outputFile    = "maze.png"
+		mazeWidth  = 40
+		mazeHeight = 40
+		cellSize   = 20
+		outputFile = "maze.html"
 	)
 
 	m := newMaze(mazeWidth, mazeHeight)
 	m.carvePassages()
 	exits := m.createExits()
 
-	if err := drawMaze(m, exits, cellSize, wallThickness, outputFile); err != nil {
+	if len(exits) < 2 {
+		panic("not enough exits to compute a solution")
+	}
+
+	solution, err := m.solvePath(exits[0], exits[1])
+	if err != nil {
+		panic(err)
+	}
+
+	if err := generateHTML(m, exits, solution, cellSize, outputFile); err != nil {
 		panic(err)
 	}
 }
