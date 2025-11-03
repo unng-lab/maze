@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Maze</title>
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f5f5f5;
+            color: #222;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        .maze {
+            display: grid;
+            grid-template-columns: repeat({{.Width}}, {{.CellSize}}px);
+            gap: 0;
+            background: #bdbdbd;
+            padding: 8px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .cell {
+            width: {{.CellSize}}px;
+            height: {{.CellSize}}px;
+            box-sizing: border-box;
+            position: relative;
+            background: #fff;
+        }
+
+        .cell.top {
+            border-top: 2px solid #000;
+        }
+
+        .cell.right {
+            border-right: 2px solid #000;
+        }
+
+        .cell.bottom {
+            border-bottom: 2px solid #000;
+        }
+
+        .cell.left {
+            border-left: 2px solid #000;
+        }
+
+        .cell.solution {
+            background: #fff59d;
+        }
+
+        .cell.exit::after {
+            content: attr(data-label);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            color: #1565c0;
+        }
+
+        .legend {
+            margin-top: 20px;
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .legend span {
+            display: inline-block;
+            margin-right: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Сгенерированный лабиринт</h1>
+        <div class="maze">
+            {{range $y, $row := .Cells}}
+                {{range $x, $cell := $row}}
+                    <div class="cell{{if $cell.Top}} top{{end}}{{if $cell.Right}} right{{end}}{{if $cell.Bottom}} bottom{{end}}{{if $cell.Left}} left{{end}}{{if $cell.IsSolution}} solution{{end}}{{if $cell.Label}} exit{{end}}"{{if $cell.Label}} data-label="{{$cell.Label}}"{{end}}></div>
+                {{end}}
+            {{end}}
+        </div>
+        <div class="legend">
+            <span><strong>Выходы:</strong> {{range $index, $label := .ExitLabels}}{{if $index}}, {{end}}{{$label}}{{end}}</span>
+            <span><strong>Маршрут:</strong> {{.SolutionRange}}</span>
+        </div>
+    </div>
+</body>
+</html>
