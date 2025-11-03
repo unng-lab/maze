@@ -229,8 +229,6 @@ func (m *Maze) SolvePath(start, goal Exit) ([]Point, error) {
 			break
 		}
 
-		cell := m.Cells[current.Y][current.X]
-
 		for _, d := range directions {
 			if m.hasWall(current.X, current.Y, d.dir) {
 				continue

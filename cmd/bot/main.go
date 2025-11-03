@@ -49,13 +49,22 @@ func main() {
 
 	builder := maze.NewRandomBuilder(time.Now().UnixNano())
 
-	srv := server.New(server.Config{
+	srv, err := server.New(server.Config{
 		Address:    cfg.httpAddress,
 		MazeWidth:  cfg.mazeWidth,
 		MazeHeight: cfg.mazeHeight,
 		CellSize:   cfg.cellSize,
 		ExitLabels: cfg.exitLabels,
 	}, builder, renderer, logger)
+	if err != nil {
+		logger.Error("create server", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if cerr := srv.Close(); cerr != nil {
+			logger.Error("cleanup server", "error", cerr)
+		}
+	}()
 
 	botInstance, err := bot.New(bot.Config{
 		Token:     cfg.botToken,
