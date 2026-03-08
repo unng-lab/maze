@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maze Forge</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero__copy">
+        <p class="eyebrow">Serverless maze challenge</p>
+        <h1>Maze Forge</h1>
+        <p class="hero__lede">
+          Один вход, четыре выхода и один правильный ответ. Выбери выход, затем приложение
+          покажет маршрут и сразу подготовит следующий лабиринт.
+        </p>
+      </div>
+
+      <button id="open-settings" class="button button--ghost hero__settings" type="button" aria-expanded="false" aria-controls="settings-drawer">
+        Настройки
+      </button>
+    </header>
+
+    <main class="workspace">
+      <section class="preview-panel">
+        <div class="preview-panel__header">
+          <div>
+            <p class="eyebrow">Maze board</p>
+            <h2>Найди верный выход</h2>
+          </div>
+          <p id="maze-size" class="preview-panel__size">-</p>
+        </div>
+
+        <div id="canvas-frame" class="canvas-frame">
+          <canvas id="maze-canvas"></canvas>
+        </div>
+
+        <div id="answer-buttons" class="answer-buttons" aria-label="Выбор выхода"></div>
+
+        <div class="summary">
+          <div class="metric">
+            <span class="metric__label">Seed</span>
+            <strong id="metric-seed">-</strong>
+          </div>
+          <div class="metric">
+            <span class="metric__label">Route length</span>
+            <strong id="metric-route">-</strong>
+          </div>
+          <div class="metric">
+            <span class="metric__label">Dead ends</span>
+            <strong id="metric-dead-ends">-</strong>
+          </div>
+          <div class="metric">
+            <span class="metric__label">Entrance</span>
+            <strong id="metric-entrance">-</strong>
+          </div>
+        </div>
+
+        <p id="status" class="status" aria-live="polite"></p>
+      </section>
+    </main>
+  </div>
+
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+
+  <aside id="settings-drawer" class="settings-drawer" aria-hidden="true" hidden>
+    <div class="settings-drawer__header">
+      <div>
+        <p class="eyebrow">Drawer</p>
+        <h2>Настройки</h2>
+      </div>
+      <button id="close-settings" class="button button--ghost settings-drawer__close" type="button" aria-label="Закрыть настройки">
+        Закрыть
+      </button>
+    </div>
+
+    <form id="controls" class="controls" autocomplete="off">
+      <div class="controls__grid">
+        <label class="field">
+          <span>Width</span>
+          <input id="maze-width" name="width" type="number" min="5" max="80" step="1" value="24">
+        </label>
+
+        <label class="field">
+          <span>Height</span>
+          <input id="maze-height" name="height" type="number" min="5" max="80" step="1" value="18">
+        </label>
+
+        <label class="field">
+          <span>Cell size</span>
+          <input id="cell-size" name="cellSize" type="number" min="12" max="40" step="1" value="24">
+        </label>
+
+        <label class="field field--wide">
+          <span>Seed</span>
+          <div class="seed-row">
+            <input id="seed" name="seed" type="text" value="">
+            <button id="shuffle-seed" type="button" class="button button--ghost">Shuffle</button>
+          </div>
+        </label>
+      </div>
+
+      <div class="toggles">
+        <label class="toggle">
+          <input id="show-grid" name="showGrid" type="checkbox">
+          <span>Показывать вспомогательную сетку</span>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="button button--primary">Применить</button>
+        <button id="copy-link" type="button" class="button button--ghost">Copy link</button>
+        <button id="download-png" type="button" class="button button--ghost">Download PNG</button>
+      </div>
+    </form>
+  </aside>
+
+  <script src="./app.js"></script>
+</body>
+</html>
