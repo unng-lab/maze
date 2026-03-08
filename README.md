@@ -4,9 +4,9 @@ Static frontend for generating 2D mazes directly in the browser.
 
 ## What it does
 
-- Generates a perfect 2D maze on the client side.
+- Generates a segmented 2D maze on the client side.
 - Uses a seed, so the same settings reproduce the same maze.
-- Shows exits and the route between the first two exits.
+- Shows four exits where only one is reachable from the entrance.
 - Exports the rendered maze as a PNG.
 - Stores settings in the URL hash and local storage.
 

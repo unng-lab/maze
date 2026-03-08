@@ -261,9 +261,12 @@
     const grid = createGrid(settings.width, settings.height);
     carveMaze(grid, settings.width, settings.height, rng);
 
-    const entrance = createEntrance(grid, settings.width, settings.height, rng);
-    const exits = createExits(grid, settings.width, settings.height, rng, entrance);
-    const correctExit = exits[Math.floor(rng() * exits.length)];
+    const components = splitMazeIntoComponents(grid, settings.width, settings.height, rng);
+    const entranceRegion = components[Math.floor(rng() * components.length)];
+    const entrance = createEntrance(grid, settings.width, settings.height, rng, entranceRegion);
+    const exitLayout = createExits(grid, settings.width, settings.height, rng, entrance, components, entranceRegion);
+    const exits = exitLayout.exits;
+    const correctExit = exitLayout.correctExit;
     const route = findRoute(grid, settings.width, settings.height, entrance, correctExit);
     const deadEnds = countDeadEnds(grid);
 
@@ -348,8 +351,8 @@
     }
   }
 
-  function createEntrance(grid, width, height, rng) {
-    const candidates = borderCandidates(width, height);
+  function createEntrance(grid, width, height, rng, region) {
+    const candidates = borderCandidatesForRegion(width, height, region);
     const choice = candidates[Math.floor(rng() * candidates.length)];
     grid[choice.y][choice.x].walls[choice.side] = false;
 
@@ -361,26 +364,255 @@
     };
   }
 
-  function createExits(grid, width, height, rng, entrance) {
-    const candidates = borderCandidates(width, height).filter(function (candidate) {
-      return !(candidate.x === entrance.x && candidate.y === entrance.y);
-    });
-
-    shuffle(candidates, rng);
-
+  function createExits(grid, width, height, rng, entrance, components, entranceRegion) {
     const exits = [];
-    for (let index = 0; index < EXIT_COUNT; index += 1) {
-      const candidate = candidates[index];
-      grid[candidate.y][candidate.x].walls[candidate.side] = false;
-      exits.push({
-        x: candidate.x,
-        y: candidate.y,
-        side: candidate.side,
-        label: answerLabels[index]
-      });
+    const correctExit = createExitInRegion(grid, width, height, rng, entranceRegion, entrance);
+    correctExit.isCorrect = true;
+    exits.push(correctExit);
+
+    for (let index = 0; index < components.length; index += 1) {
+      const region = components[index];
+      if (region === entranceRegion) {
+        continue;
+      }
+
+      exits.push(createExitInRegion(grid, width, height, rng, region, null));
     }
 
-    return exits;
+    shuffle(exits, rng);
+    exits.forEach(function (exit, index) {
+      exit.label = answerLabels[index];
+    });
+
+    return {
+      exits: exits,
+      correctExit: exits.find(function (exit) {
+        return exit.isCorrect;
+      })
+    };
+  }
+
+  function createExitInRegion(grid, width, height, rng, region, excludedPoint) {
+    const candidates = borderCandidatesForRegion(width, height, region).filter(function (candidate) {
+      if (!excludedPoint) {
+        return true;
+      }
+
+      return !(candidate.x === excludedPoint.x && candidate.y === excludedPoint.y);
+    });
+    const choice = candidates[Math.floor(rng() * candidates.length)];
+    grid[choice.y][choice.x].walls[choice.side] = false;
+
+    return {
+      x: choice.x,
+      y: choice.y,
+      side: choice.side,
+      label: ""
+    };
+  }
+
+  function borderCandidatesForRegion(width, height, region) {
+    return region.borderCandidates.slice();
+  }
+
+  function splitMazeIntoComponents(grid, width, height, rng) {
+    const attempts = 240;
+    const minComponentSize = Math.max(6, Math.floor((width * height) / 12));
+    const edges = listOpenEdges(grid, width, height);
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const blockedEdges = pickBlockedEdges(edges, rng);
+      const components = findComponents(grid, width, height, blockedEdges);
+      const valid = components.length === EXIT_COUNT && components.every(function (component) {
+        return component.cells.length >= minComponentSize && component.borderCandidates.length > 0;
+      });
+
+      if (!valid) {
+        continue;
+      }
+
+      applyBlockedEdges(grid, blockedEdges);
+      return components;
+    }
+
+    throw new Error("Failed to split maze into four irregular components.");
+  }
+
+  function listOpenEdges(grid, width, height) {
+    const edges = [];
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const cell = grid[y][x];
+
+        if (!cell.walls.east && x + 1 < width) {
+          edges.push({
+            fromX: x,
+            fromY: y,
+            toX: x + 1,
+            toY: y,
+            direction: "east"
+          });
+        }
+
+        if (!cell.walls.south && y + 1 < height) {
+          edges.push({
+            fromX: x,
+            fromY: y,
+            toX: x,
+            toY: y + 1,
+            direction: "south"
+          });
+        }
+      }
+    }
+
+    return edges;
+  }
+
+  function pickBlockedEdges(edges, rng) {
+    const pool = edges.slice();
+    const blocked = new Set();
+
+    shuffle(pool, rng);
+
+    for (let index = 0; index < EXIT_COUNT - 1; index += 1) {
+      blocked.add(edgeKey(pool[index].fromX, pool[index].fromY, pool[index].toX, pool[index].toY));
+    }
+
+    return blocked;
+  }
+
+  function findComponents(grid, width, height, blockedEdges) {
+    const visited = new Set();
+    const components = [];
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const startKey = pointKey(x, y);
+        if (visited.has(startKey)) {
+          continue;
+        }
+
+        const queue = [{ x: x, y: y }];
+        const cells = [];
+        const cellKeys = new Set([startKey]);
+        visited.add(startKey);
+
+        while (queue.length > 0) {
+          const current = queue.shift();
+          const cell = grid[current.y][current.x];
+          cells.push(current);
+
+          for (let index = 0; index < wallOrder.length; index += 1) {
+            const direction = wallOrder[index];
+            const rule = wallMap[direction];
+
+            if (cell.walls[direction]) {
+              continue;
+            }
+
+            const nextX = current.x + rule.dx;
+            const nextY = current.y + rule.dy;
+
+            if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) {
+              continue;
+            }
+
+            if (blockedEdges.has(edgeKey(current.x, current.y, nextX, nextY))) {
+              continue;
+            }
+
+            const nextKey = pointKey(nextX, nextY);
+            if (visited.has(nextKey)) {
+              continue;
+            }
+
+            visited.add(nextKey);
+            cellKeys.add(nextKey);
+            queue.push({ x: nextX, y: nextY });
+          }
+        }
+
+        components.push({
+          cells: cells,
+          borderCandidates: buildBorderCandidatesForCells(cells, width, height)
+        });
+      }
+    }
+
+    return components;
+  }
+
+  function buildBorderCandidatesForCells(cells, width, height) {
+    const candidates = [];
+
+    for (let index = 0; index < cells.length; index += 1) {
+      const cell = cells[index];
+
+      if (cell.y === 0) {
+        candidates.push({ x: cell.x, y: cell.y, side: "north" });
+      }
+      if (cell.y === height - 1) {
+        candidates.push({ x: cell.x, y: cell.y, side: "south" });
+      }
+      if (cell.x === 0) {
+        candidates.push({ x: cell.x, y: cell.y, side: "west" });
+      }
+      if (cell.x === width - 1) {
+        candidates.push({ x: cell.x, y: cell.y, side: "east" });
+      }
+    }
+
+    return candidates;
+  }
+
+  function applyBlockedEdges(grid, blockedEdges) {
+    blockedEdges.forEach(function (key) {
+      const edge = parseEdgeKey(key);
+      const fromCell = grid[edge.fromY][edge.fromX];
+      const toCell = grid[edge.toY][edge.toX];
+
+      if (edge.fromX === edge.toX) {
+        if (edge.fromY < edge.toY) {
+          fromCell.walls.south = true;
+          toCell.walls.north = true;
+        } else {
+          fromCell.walls.north = true;
+          toCell.walls.south = true;
+        }
+        return;
+      }
+
+      if (edge.fromX < edge.toX) {
+        fromCell.walls.east = true;
+        toCell.walls.west = true;
+      } else {
+        fromCell.walls.west = true;
+        toCell.walls.east = true;
+      }
+    });
+  }
+
+  function edgeKey(x1, y1, x2, y2) {
+    if (x1 < x2 || (x1 === x2 && y1 <= y2)) {
+      return String(x1) + ":" + String(y1) + "|" + String(x2) + ":" + String(y2);
+    }
+
+    return String(x2) + ":" + String(y2) + "|" + String(x1) + ":" + String(y1);
+  }
+
+  function parseEdgeKey(key) {
+    const parts = key.split("|");
+    const start = parts[0].split(":");
+    const end = parts[1].split(":");
+
+    return {
+      fromX: Number.parseInt(start[0], 10),
+      fromY: Number.parseInt(start[1], 10),
+      toX: Number.parseInt(end[0], 10),
+      toY: Number.parseInt(end[1], 10)
+    };
   }
 
   function borderCandidates(width, height) {
@@ -602,11 +834,9 @@
     const wallWidth = Math.max(2, Math.round(cellSize * 0.12));
 
     drawBackground(totalWidth, totalHeight, innerX, innerY, innerW, innerH, feedbackState);
-
     if (renderModel.settings.showGrid) {
       drawGrid(innerX, innerY, width, height, cellSize);
     }
-
     drawExitHighlights(renderModel, innerX, innerY, cellSize);
     if (routeProgress > 0) {
       drawRoute(renderModel.route, innerX, innerY, cellSize, routeProgress, feedbackState);
