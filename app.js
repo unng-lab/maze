@@ -6,8 +6,8 @@
   const REGENERATE_DELAY = 1100;
   const MIN_ROUTE_SHARE_OF_PERIMETER = 0.5;
   const defaults = {
-    width: 24,
-    height: 18,
+    width: 48,
+    height: 30,
     cellSize: 24,
     seed: "",
     showGrid: false
