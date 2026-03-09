@@ -4,6 +4,7 @@
   const EXIT_COUNT = 4;
   const REVEAL_DURATION = 1200;
   const REGENERATE_DELAY = 1100;
+  const MIN_ROUTE_SHARE_OF_PERIMETER = 0.5;
   const defaults = {
     width: 24,
     height: 18,
@@ -366,7 +367,7 @@
 
   function createExits(grid, width, height, rng, entrance, components, entranceRegion) {
     const exits = [];
-    const correctExit = createExitInRegion(grid, width, height, rng, entranceRegion, entrance);
+    const correctExit = createPreferredCorrectExit(grid, width, height, rng, entranceRegion, entrance);
     correctExit.isCorrect = true;
     exits.push(correctExit);
 
@@ -389,6 +390,36 @@
       correctExit: exits.find(function (exit) {
         return exit.isCorrect;
       })
+    };
+  }
+
+  function createPreferredCorrectExit(grid, width, height, rng, region, entrance) {
+    const minimumRouteLength = Math.ceil((width * 2 + height * 2) * MIN_ROUTE_SHARE_OF_PERIMETER);
+    const candidates = borderCandidatesForRegion(width, height, region).filter(function (candidate) {
+      return !(candidate.x === entrance.x && candidate.y === entrance.y);
+    }).map(function (candidate) {
+      return {
+        x: candidate.x,
+        y: candidate.y,
+        side: candidate.side,
+        routeLength: findRoute(grid, width, height, entrance, candidate).length - 1
+      };
+    });
+    const preferredCandidates = candidates.filter(function (candidate) {
+      return candidate.routeLength >= minimumRouteLength;
+    });
+    const pool = preferredCandidates.length > 0 ? preferredCandidates : candidates.slice().sort(function (left, right) {
+      return right.routeLength - left.routeLength;
+    }).slice(0, Math.max(1, Math.ceil(candidates.length / 4)));
+    const choice = pool[Math.floor(rng() * pool.length)];
+
+    grid[choice.y][choice.x].walls[choice.side] = false;
+
+    return {
+      x: choice.x,
+      y: choice.y,
+      side: choice.side,
+      label: ""
     };
   }
 
